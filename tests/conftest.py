@@ -1,74 +1,28 @@
 """Фикстуры для тестов Agent Forge.
 
-FakeLLM — переиспользуемый фейк, заменяющий GigaChat в тестах.
+FakeLLM и готовые FAKE_* объекты живут в app/testing/fakes.py (общий с evals/),
+здесь они только реэкспортируются для совместимости импортов в тестах.
 Контракт: объект с методом with_structured_output(Schema) → объект с async ainvoke(messages).
 """
 
 import pytest
 
 from app.schemas.pipeline import GeneratedCode, Plan, ReviewVerdict
-
-
-class FakeStructuredOutput:
-    """Возвращает фиксированный Pydantic-объект при ainvoke."""
-
-    def __init__(self, response_obj):
-        self._response = response_obj
-
-    async def ainvoke(self, messages):
-        return self._response
-
-
-class FakeLLM:
-    """Фейковый LLM: with_structured_output возвращает нужный объект по типу схемы.
-
-    responses — dict {SchemaClass: instance}, для незарегистрированных схем падает.
-    Также ведёт счётчики вызовов по схеме для проверки количества итераций.
-    """
-
-    def __init__(self, responses: dict):
-        self._responses = responses
-        self.call_counts: dict = {}
-
-    def with_structured_output(self, schema):
-        if schema not in self._responses:
-            raise ValueError(f"FakeLLM: нет ответа для схемы {schema}")
-        self.call_counts[schema] = self.call_counts.get(schema, 0)
-
-        outer = self
-
-        class _Invoker:
-            async def ainvoke(self, messages):
-                outer.call_counts[schema] = outer.call_counts.get(schema, 0) + 1
-                return outer._responses[schema]
-
-        return _Invoker()
-
-
-# --- Готовые объекты-ответы ---
-
-FAKE_PLAN = Plan(
-    steps=["Написать функцию", "Покрыть тестами"],
-    summary="Суммарное описание задачи",
+from app.testing.fakes import (
+    FAKE_CODE,
+    FAKE_PLAN,
+    FAKE_VERDICT_FIX,
+    FAKE_VERDICT_PASS,
+    FakeLLM,
 )
 
-FAKE_CODE = GeneratedCode(
-    code="def hello(): return 'hello'",
-    language="python",
-    explanation="Простая функция hello",
-)
-
-FAKE_VERDICT_PASS = ReviewVerdict(
-    verdict="pass",
-    issues=[],
-    feedback="Всё хорошо",
-)
-
-FAKE_VERDICT_FIX = ReviewVerdict(
-    verdict="fix",
-    issues=["Нет docstring"],
-    feedback="Добавь docstring к функции",
-)
+__all__ = [
+    "FAKE_CODE",
+    "FAKE_PLAN",
+    "FAKE_VERDICT_FIX",
+    "FAKE_VERDICT_PASS",
+    "FakeLLM",
+]
 
 
 @pytest.fixture
@@ -97,7 +51,7 @@ def fake_llm_always_fix():
 
 @pytest.fixture
 def initial_state():
-    """Начальное состояние графа для тестов."""
+    """Начальное состояние графа для тестов (включает HITL-поля)."""
     return {
         "task": "Напиши функцию hello world",
         "plan": None,
@@ -106,4 +60,73 @@ def initial_state():
         "verdict": None,
         "iterations": 0,
         "status": "new",
+        "approval_decision": None,
+        "approval_feedback": "",
     }
+
+
+class FakeDocumentRepository:
+    """Фейк-репозиторий для RAG-тестов без живой БД.
+
+    Возвращает заранее заданные списки чанков по методам lexical/vector search.
+    Реализует контракт DocumentRepository.
+    """
+
+    def __init__(self, lexical_results=None, vector_results=None):
+        from app.schemas.rag import RetrievedChunk
+
+        self._lexical = lexical_results if lexical_results is not None else []
+        self._vector = vector_results if vector_results is not None else []
+        self.lexical_calls = 0
+        self.vector_calls = 0
+
+    async def lexical_search(self, query: str, limit: int):
+        self.lexical_calls += 1
+        return self._lexical[:limit]
+
+    async def vector_search(self, embedding: list, limit: int):
+        self.vector_calls += 1
+        return self._vector[:limit]
+
+    async def add_chunks(self, chunks, embeddings):
+        pass
+
+
+class FakeEmbeddings:
+    """Фейк эмбеддингов для RAG-тестов без сети.
+
+    aembed_query возвращает вектор нужной размерности.
+    """
+
+    def __init__(self, dim: int = 1024):
+        self._dim = dim
+        self.embed_calls = 0
+
+    async def aembed_query(self, text: str) -> list[float]:
+        self.embed_calls += 1
+        return [0.1] * self._dim
+
+    async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [[0.1] * self._dim for _ in texts]
+
+
+@pytest.fixture
+def fake_repo():
+    """Фейк-репозиторий с тестовыми чанками."""
+    from app.schemas.rag import RetrievedChunk
+
+    lexical = [
+        RetrievedChunk(content="Контент документа 1", source="doc1.md", score=0.9),
+        RetrievedChunk(content="Контент документа 2", source="doc2.md", score=0.7),
+    ]
+    vector = [
+        RetrievedChunk(content="Контент документа 2", source="doc2.md", score=0.8),
+        RetrievedChunk(content="Контент документа 3", source="doc3.md", score=0.6),
+    ]
+    return FakeDocumentRepository(lexical_results=lexical, vector_results=vector)
+
+
+@pytest.fixture
+def fake_embeddings():
+    """Фейк эмбеддингов."""
+    return FakeEmbeddings(dim=1024)

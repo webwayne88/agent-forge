@@ -17,3 +17,23 @@ class GraphState(TypedDict):
     verdict: ReviewVerdict | None
     iterations: int
     status: str
+    # HITL: решение человека на этапе approval ('approved'|'rejected'|None)
+    approval_decision: str | None
+    # HITL: комментарий человека при reject — приоритетнее авто-feedback ревьюера
+    approval_feedback: str
+
+
+def initial_state(task: str) -> dict:
+    """Начальное состояние графа по задаче — единая точка инициализации
+    для роутера и eval-раннера (схема меняется в одном месте)."""
+    return {
+        "task": task,
+        "plan": None,
+        "context": "",
+        "code": None,
+        "verdict": None,
+        "iterations": 0,
+        "status": "new",
+        "approval_decision": None,
+        "approval_feedback": "",
+    }

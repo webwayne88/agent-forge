@@ -8,9 +8,18 @@ pydantic-settings==2.6.1
 langgraph>=0.2.0
 langchain-gigachat>=0.5.0
 langchain-core>=0.3.0
+# Метапакет langchain нужен для langfuse v4 langchain-интеграции (CallbackHandler)
+langchain>=1.0,<2.0
+
+# RAG: PostgreSQL + pgvector через asyncpg
+asyncpg==0.30.0
+pgvector==0.3.6
 
 # Инструменты и утилиты
 python-dotenv==1.0.1
+# Observability: трейсинг cost/latency/tokens через LangChain CallbackHandler.
+# Пин >=3.0.0 — код написан под v3+ API (from langfuse.langchain import CallbackHandler).
+langfuse>=3.0.0
 
 # Разработка и тестирование
 pytest==9.1.1

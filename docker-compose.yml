@@ -1,6 +1,22 @@
-version: '3.9'
-
 services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: agent-forge-db
+    environment:
+      POSTGRES_DB: agent_forge
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d agent_forge"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
   app:
     build:
       context: .
@@ -12,34 +28,10 @@ services:
       - .env
     environment:
       - PYTHONUNBUFFERED=1
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
-  # СЛЕДУЮЩАЯ ИТЕРАЦИЯ: pgvector + RAG
-  # postgres:
-  #   image: pgvector/pgvector:pg17-latest
-  #   container_name: agent-forge-db
-  #   environment:
-  #     POSTGRES_DB: agent_forge
-  #     POSTGRES_USER: postgres
-  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-  #   ports:
-  #     - "5432:5432"
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
-  #   restart: unless-stopped
-  #
-  # СЛЕДУЮЩАЯ ИТЕРАЦИЯ: Langfuse трейсинг
-  # langfuse:
-  #   image: ghcr.io/langfuse/langfuse:latest
-  #   container_name: agent-forge-traces
-  #   ports:
-  #     - "3000:3000"
-  #   environment:
-  #     DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/langfuse
-  #     NEXTAUTH_SECRET: ${LANGFUSE_SECRET_KEY}
-  #   depends_on:
-  #     - postgres
-  #   restart: unless-stopped
-
-# volumes:
-#   postgres_data:
+volumes:
+  postgres_data:
