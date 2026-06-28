@@ -1,0 +1,45 @@
+version: '3.9'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agent-forge
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+  # СЛЕДУЮЩАЯ ИТЕРАЦИЯ: pgvector + RAG
+  # postgres:
+  #   image: pgvector/pgvector:pg17-latest
+  #   container_name: agent-forge-db
+  #   environment:
+  #     POSTGRES_DB: agent_forge
+  #     POSTGRES_USER: postgres
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+  #
+  # СЛЕДУЮЩАЯ ИТЕРАЦИЯ: Langfuse трейсинг
+  # langfuse:
+  #   image: ghcr.io/langfuse/langfuse:latest
+  #   container_name: agent-forge-traces
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/langfuse
+  #     NEXTAUTH_SECRET: ${LANGFUSE_SECRET_KEY}
+  #   depends_on:
+  #     - postgres
+  #   restart: unless-stopped
+
+# volumes:
+#   postgres_data:
