@@ -1,0 +1,18 @@
+# Основное приложение
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+# LangGraph и LangChain
+langgraph>=0.2.0
+langchain-gigachat>=0.5.0
+langchain-core>=0.3.0
+
+# Инструменты и утилиты
+python-dotenv==1.0.1
+
+# Разработка и тестирование
+pytest==9.1.1
+pytest-asyncio==1.4.0
+httpx==0.28.1
