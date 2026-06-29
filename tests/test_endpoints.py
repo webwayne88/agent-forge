@@ -9,9 +9,8 @@ aget_state/aupdate_state в реальном MemorySaver без сети.
 
 import uuid
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 from httpx import ASGITransport, AsyncClient
 

@@ -19,7 +19,7 @@ Agent Forge показывает другой уровень инженерно�
 - reflection-loop с двойным ограничителем (счётчик в state + conditional edge) — гарантированно завершается.
 
 **Реализовано (итерация 2 — RAG + Observability + Eval + HITL):**
-- Knowledge: RAG (PostgreSQL + pgvector + hybrid search BM25/RRF + GigaChat Embeddings), узел retrieve — реальный;
+- Knowledge: RAG (PostgreSQL + pgvector с halfvec(2560) + HNSW-индекс + hybrid search BM25/lexical + vector/semantic + RRF + GigaChat Embeddings), узел retrieve — реальный;
 - Observability: Langfuse-трейсинг (cost, latency, tokens) через LangChain callbacks; без ключей — no-op;
 - Evaluation: eval-датасет (`evals/`) + раннер (pass-rate/latency/cost) + CI eval-gate;
 - Enterprise: human-in-the-loop (interrupt перед approval), approve/reject/rollback, история чекпойнтов.
@@ -71,7 +71,7 @@ Agent Forge показывает другой уровень инженерно�
 | Агент | Ответственность | Реализация |
 |-------|-----------------|-----------|
 | **Planner** | Декомпозирует ТЗ в структурированный план; код НЕ пишет | Реализовано (`planner.md`, узел в graph.py) |
-| **Retrieve** | Возвращает контекст через RAG (гибридный поиск BM25/вектор) | Реализовано (`retrieve` с PgDocumentRepository) |
+| **Retrieve** | Возвращает контекст через гибридный RAG (lexical tsvector + vector halfvec + RRF); без БД — graceful fallback на пустой context | Реализовано (hybrid_search + PgDocumentRepository или фейк в тестах) |
 | **Coder** | Генерирует код по плану + контексту; на retry учитывает feedback | Реализовано (`coder.md`, feedback loop) |
 | **Reviewer** | Ревьюит код и выносит вердикт `pass`/`fix` | Реализовано (`reviewer.md`, conditional edge) |
 | **Approval** | Human-in-the-loop gate перед финалом; approve/reject/rollback | Реализовано (HITL-узел, эндпоинты) |
@@ -85,10 +85,10 @@ Async-first, оркестрация на **LangGraph** (StateGraph + conditional
 - **State** — `TypedDict` (состояние графа), **схемы** — Pydantic.
 - **Узлы графа:** 
   - `planner` — декомпозирует ТЗ в структурированный план (`Plan`), код НЕ пишет
-  - `retrieve` — выполняет гибридный поиск по документам (BM25/lexical + вектор) через PostgreSQL/pgvector
-  - `coder` — генерирует код по плану и контексту (`GeneratedCode`)
+  - `retrieve` — выполняет гибридный поиск (lexical через tsvector + ts_rank, vector через halfvec(2560) + cosine distance, слияние через RRF) или graceful fallback (пустой context при отсутствии DATABASE_URL)
+  - `coder` — генерирует код по плану и контексту (`GeneratedCode`), на retry учитывает feedback
   - `reviewer` — ревьюит код, выносит вердикт `pass`/`fix` (`ReviewVerdict`)
-  - `approval` — HITL-gate: останавливает граф перед финалом (interrupt_before)
+  - `approval` — HITL-gate: останавливает граф перед финалом (interrupt_before), человек одобряет/отклоняет
 - **Conditional edge** после reviewer: возврат к coder только если `verdict == "fix"` И `iterations < max_reflection_iterations`; иначе — на approval (HITL-gate)
 - **HITL-gate** (узел approval): граф останавливается на `interrupt_before=["approval"]`; человек решает approve/reject через эндпоинты
 - **Reject как доработка**: если итераций осталось, reject возвращает граф к coder для доработки по feedback; после завершения — снова на approval
@@ -105,7 +105,7 @@ Async-first, оркестрация на **LangGraph** (StateGraph + conditional
 | **Backend** | FastAPI (async), Pydantic (schemas + structured output), TypedDict (state) | Реализовано |
 | **Оркестрация** | LangGraph — StateGraph, conditional edges, MemorySaver checkpointer, HITL interrupt | Реализовано |
 | **LLM** | GigaChat-2-Max через langchain-gigachat (`scope=GIGACHAT_API_CORP`, `temperature=0.11`) | Реализовано |
-| **Knowledge** | RAG (PostgreSQL + pgvector + hybrid search BM25/RRF + GigaChat Embeddings) | Реализовано |
+| **Knowledge** | RAG: PostgreSQL + pgvector (halfvec 2560-мерные + HNSW-индекс) + hybrid search (lexical tsvector + vector cosine + RRF) + GigaChat Embeddings | Реализовано |
 | **Observability** | Langfuse трейсинг (cost, latency, tokens) через LangChain callbacks | Реализовано |
 | **Evaluation** | pytest (36+ тестов на фейковом LLM); eval-датасет + CI eval-gate | Реализовано |
 | **Инфра** | Docker Compose (postgres + app), python:3.11-slim, `.env.example`, pytest.ini, GitHub Actions CI | Реализовано |
@@ -119,7 +119,7 @@ Async-first, оркестрация на **LangGraph** (StateGraph + conditional
 | **3 агента, не 12** | Цепочка из 12 LLM-звеньев накапливает ошибку и хрупка; узкий срез в production-качестве надёжнее | Реализовано |
 | **Planner не пишет код** | Декомпозиция и реализация — разный контекст; смешение раздувает контекст и мешает дебагу | Реализовано (промпт, тесты) |
 | **GigaChat-2-Max вместо OpenAI** | Корпоративный scope, нет зависимостей от внешних провайдеров | Реализовано (langchain-gigachat) |
-| **RAG вместо мировых знаний LLM** | Точность кода на проектных конвенциях/доках > дофига параметров для LLM | Реализовано (pgvector + hybrid search) |
+| **RAG (halfvec + HNSW + hybrid)** | Размерность GigaChat Embeddings 2560 > 2000 (лимит HNSW для vector); halfvec даёт поддержку до 4000 мер при экономии памяти. Гибридный поиск (lexical+vector+RRF) повышает precision на коротких/специальных запросах | Реализовано (pgvector + schema.sql + PgDocumentRepository) |
 | **Reflection с `max_iterations=3`** | Без ограничителей петля Coder ↔ Reviewer не завершается; двойной ограничитель (итерации + conditional edge) гарантирует конечность | Реализовано (state + conditional edge) |
 | **HITL на финальном шаге** | Контроль на критичной точке без потери автономности пайплайна; reject как доработка, не отмена | Реализовано (approval-узел, эндпоинты) |
 | **LLM инжектируется, не импортируется** | Граф нетестируем без подменяемости; фейк в conftest.py позволяет гонять 36+ тестов без сети и ключа | Реализовано (factory, fixture-based) |
@@ -193,15 +193,18 @@ agent-forge/
 └── README.md                    # этот файл
 ```
 
-**Ключевые файлы (итерация 2):**
+**Ключевые файлы (итерация 2 — RAG + HITL + Eval + Observability):**
+- `app/db/schema.sql` — DDL: extension vector, таблица documents с тремя типами поиска (id, source, content, content_tsv, embedding halfvec(2560)), GIN-индекс на tsvector, HNSW-индекс на halfvec
+- `app/repositories/documents.py` — PgDocumentRepository: lexical_search (ts_rank), vector_search (cosine distance), add_chunks (для ingestion)
+- `app/rag/hybrid.py` — hybrid_search(): параллель lexical + vector, RRF слияние для top_k
+- `app/graph/nodes.py` — узел `retrieve` выполняет real hybrid_search или graceful fallback (если repo=None)
+- `scripts/ingest.py` — ingestion: читает CLAUDE.md/README.md/prompts/, чанкит, вычисляет эмбеддинги (GigaChat), пишет в pgvector батчами
 - `app/graph/graph.py` — `build_graph()` с _route_after_review (reflection) + _route_after_approval (HITL)
-- `app/graph/nodes.py` — узел `retrieve` теперь вызывает `PgDocumentRepository.{lexical,vector}_search()`
 - `app/routers/forge.py` — эндпоинты `/forge` (ainvoke + interrupt_before), `/approve`, `/reject`, `/history`, `/rollback`
-- `app/repositories/documents.py` — PgDocumentRepository: ts_rank (BM25) + vector поиск через asyncpg
-- `app/observability/langfuse.py` — get_callbacks(): трейсинг без ключей = [] (no-op)
-- `evals/runner.py` — run_dataset(): проходит кейсы, вычисляет pass-rate/latency/cost
+- `app/observability/langfuse.py` — get_callbacks(): трейсинг cost/latency/tokens без ключей = [] (no-op)
+- `evals/runner.py` — run_dataset(): проходит кейсы, вычисляет pass-rate/latency/cost (на фейк-LLM для CI)
 - `evals/dataset.json` — задачи с критериями (expect_verdict, expect_language, expect_code_contains)
-- `.github/workflows/ci.yml` — шаги: lint, test, eval-gate (python -m evals.runner)
+- `.github/workflows/ci.yml` — шаги: lint, test, eval-gate (python -m evals.runner с порогом pass-rate)
 
 ---
 
@@ -249,23 +252,61 @@ python -m evals.runner
 # 6. Запустить приложение локально
 uvicorn app.main:app --reload
 
-# 7. Проверить здоровье
+# 7. Проверить здоровье (работает везде, даже без RAG)
 curl http://localhost:8000/health
 
-# 8. Запустить пайплайн и встать на HITL-паузу
+# 8. Запустить пайплайн без RAG (retrieve вернёт пустой контекст)
 curl -X POST http://localhost:8000/forge \
   -H "Content-Type: application/json" \
   -d '{"task": "Напиши async-функцию для валидации email"}'
 # -> {"thread_id": "<id>", "status": "awaiting_approval", ...}
+```
 
-# 9. Одобрить результат
+### Локально с RAG (PostgreSQL + pgvector + hybrid search)
+
+Для включения реального гибридного поиска (lexical + vector + RRF) требуется PostgreSQL с pgvector.
+
+```bash
+# 1-6. Выполни шаги из раздела выше
+
+# 7. Запустить PostgreSQL в Docker (в фоне)
+docker compose up -d postgres
+
+# 8. Дождаться здоровья postgres (~5-10 сек)
+docker compose ps
+# postgres должна быть "healthy"
+
+# 9. Конфигурация .env — задать DATABASE_URL для asyncpg (локального postgres)
+# Отредактируй .env (или экспортируй переменную):
+export DATABASE_URL="postgresql://postgres:postgres@localhost:5432/agent_forge"
+
+# 10. Проиндексировать документы (применит schema.sql, embed доки через GigaChat, напишет в БД)
+python -m scripts.ingest
+# Выведет: "Проиндексировано чанков: N" (ожидается ~30 чанков из 6 источников)
+
+# 11. Приложение по-прежнему запущено из шага 6 (или перезапусти uvicorn):
+uvicorn app.main:app --reload
+
+# 12. Теперь retrieve работает с реальным RAG-поиском
+curl -X POST http://localhost:8000/forge \
+  -H "Content-Type: application/json" \
+  -d '{"task": "Как устроен retrieve-узел?"}'
+# -> найдёт релевантные чанки из CLAUDE.md/README.md в контексте
+
+# 13. Одобрить результат
 curl -X POST http://localhost:8000/forge/<thread_id>/approve
 
-# 10. Или отклонить с комментарием (вернёт к coder для доработки)
+# 14. Или отклонить с комментарием (вернёт к coder для доработки)
 curl -X POST http://localhost:8000/forge/<thread_id>/reject \
   -H "Content-Type: application/json" \
-  -d '{"feedback": "Добавь валидацию пустой строки"}'
+  -d '{"feedback": "Добавь больше деталей про RRF"}'
 ```
+
+**Важно для RAG:**
+- `DATABASE_URL` должна быть установлена перед запуском ingestion и приложения
+- Ingestion требует реального ключа `GIGACHAT_AUTH_KEY` (для эмбеддинга текстов)
+- Первый раз ingestion может занять 30+ секунд (зависит от количества доков и времени отклика GigaChat)
+- Без `DATABASE_URL` retrieve мягко деградирует на пустой контекст, граф не падает
 
 ### Human-in-the-loop (HITL)
 
@@ -344,19 +385,26 @@ docker compose up -d
 docker compose logs -f app
 # Ждём сообщение "Uvicorn running on http://0.0.0.0:8000"
 
-# 4. Проверить здоровье
+# 4. Проверить здоровье (работает везде, даже без RAG)
 curl http://localhost:8000/health
 
-# 5. Логи приложения
+# 5. (Опционально) Проиндексировать документы для RAG
+# Выполни ingestion в новом терминале (требует GIGACHAT_AUTH_KEY в .env)
+docker compose exec app python -m scripts.ingest
+# Выведет: "Проиндексировано чанков: N" (ожидается ~30 чанков)
+
+# 6. Теперь retrieve работает с реальным гибридным поиском
+
+# 7. Логи приложения
 docker compose logs -f app
 
-# 6. Логи БД
+# 8. Логи БД
 docker compose logs postgres
 
-# 7. Остановить
+# 9. Остановить
 docker compose down
 
-# 8. Очистить томы (данные БД)
+# 10. Очистить томы (данные БД)
 docker compose down -v
 ```
 
@@ -364,7 +412,9 @@ docker compose down -v
 
 **Сервисы:**
 - **app** (localhost:8000): FastAPI, зависит от postgres (condition: service_healthy)
-- **postgres** (localhost:5432): pgvector/pgvector:pg17 для RAG (гибридный поиск) и будущей HITL-персистентности
+- **postgres** (localhost:5432): pgvector/pgvector:pg17 с гибридным поиском (lexical + vector + RRF), а также для будущей HITL-персистентности (Postgres saver)
+
+**Важно:** Если ingestion не прогнать, retrieve будет работать в fallback-режиме (пустой контекст). Это нормально — граф не падает и остальная функциональность (planner, coder, reviewer, HITL) работает как обычно.
 
 ### Переменные окружения
 
@@ -378,12 +428,12 @@ docker compose down -v
 | `GIGACHAT_TIMEOUT` | Timeout в миллисекундах | `1000` |
 | **Граф** |
 | `MAX_REFLECTION_ITERATIONS` | Макс. итераций reflection-loop Coder ↔ Reviewer (+ reject-доработка) | `3` |
-| **RAG** |
-| `DATABASE_URL` | PostgreSQL DSN (asyncpg); пусто → retrieve fallback на пустой context | пусто или `postgresql://postgres:CHANGE_ME@postgres:5432/agent_forge` (в docker-compose) |
-| `POSTGRES_PASSWORD` | Пароль postgres для docker-compose | `CHANGE_ME` (смените для прода!) |
-| `GIGACHAT_EMBEDDINGS_MODEL` | Модель embeddings (GigaChat Embeddings) | `EmbeddingsGigaR` |
-| `RAG_TOP_K` | Размер выдачи при RAG-поиске | `5` |
-| `RAG_RRF_K` | Константа RRF (Reciprocal Rank Fusion) для гибридного поиска | `60` |
+| **RAG (гибридный поиск)** |
+| `DATABASE_URL` | PostgreSQL DSN для asyncpg; пусто → retrieve fallback на пустой context, граф не падает | пусто или `postgresql://postgres:postgres@localhost:5432/agent_forge` (локально) / `postgresql://postgres:CHANGE_ME@postgres:5432/agent_forge` (в docker-compose) |
+| `POSTGRES_PASSWORD` | Пароль postgres для docker-compose (`${POSTGRES_PASSWORD}` в docker-compose.yml) | `postgres` (по умолчанию); смените для прода! |
+| `GIGACHAT_EMBEDDINGS_MODEL` | Модель embeddings (GigaChat Embeddings для подсчёта вектора запроса) | `EmbeddingsGigaR` |
+| `RAG_TOP_K` | Топ-K результатов для каждого поиска (lexical и vector) перед RRF-слиянием | `5` |
+| `RAG_RRF_K` | Константа k в RRF: score = 1/(k + rank). Выше k → более сглаженный ранжир | `60` |
 | **Observability (Langfuse)** |
 | `LANGFUSE_ENABLED` | Включить/отключить трейсинг (даже с ключами) | не требуется; if both keys present then enabled |
 | `LANGFUSE_PUBLIC_KEY` | Публичный ключ Langfuse; пусто → трейсинг отключен (no-op) | пусто |
@@ -410,7 +460,8 @@ python -m evals.runner
 
 **Что тестируется:**
 - smoke-тесты приложения: импорт FastAPI, конфиг, GET `/health`
-- граф собирается, компилируется и инициализируется с реальным retrieve
+- граф собирается, компилируется и инициализируется (retrieve с фейком репозитория, БД не требуется)
+- retrieve fallback: без DATABASE_URL граф работает, retrieve возвращает пустой context (graceful degrade)
 - happy path: planner → retrieve → coder → reviewer → pass → approval
 - reflection-loop: coder ↔ reviewer останавливается на `max_iterations=3`
 - HITL-flow: граф останавливается перед approval, эндпоинты approve/reject/history/rollback работают
@@ -481,12 +532,12 @@ python -m evals.runner
 - [ ] Дашборд метрик: графики по узлам из Langfuse
 
 **Итерация 4: Инжиниринговые оптимизации (в очереди)**
-- [ ] Parallelization retrieval: lexical_search + vector_search через asyncio.gather
-- [ ] Weighted combination retrieve results (RRF или другая стратегия)
-- [ ] Ingestion-скрипт: load docs → embed → index (в pgvector)
+- [x] Parallelization retrieval: lexical_search + vector_search через asyncio.gather
+- [x] RRF слияние результатов (Reciprocal Rank Fusion)
+- [x] Ingestion-скрипт: load docs → chunk → embed (GigaChat) → index (pgvector)
 
 ---
 
 ## Статус
 
-`v0.2.0` — **production-ready срез корпоративной AI-платформы.** Реализованы 4 фичи: RAG (гибридный поиск), Langfuse observability, eval-gate в CI, HITL (approve/reject/rollback/history). Архитектура закрывает все компетенции роли AI/LLM Systems Engineer: оркестрация агентов, ограничители (reflection-loop, лимит итераций + reject-доработка), structured output, тестирование без сети, enterprise-level контроль (человеческий gate на финале, rollback через историю чекпойнтов). Roadmap ясна, следующие итерации (persistence + audit) независимы от текущего стека.
+`v0.2.0` — **production-ready срез корпоративной AI-платформы.** Реализованы: RAG с гибридным поиском (lexical tsvector + vector halfvec(2560) + HNSW-индекс + RRF), Langfuse observability, eval-gate в CI, HITL (approve/reject/rollback/history), ingestion-скрипт для индексации проектной доки. Архитектура закрывает все компетенции роли AI/LLM Systems Engineer: оркестрация агентов, ограничители (reflection-loop, лимит итераций + reject-доработка), structured output, тестирование без сети, enterprise-level контроль (человеческий gate на финале, rollback через историю чекпойнтов). Graceful fallback: без DATABASE_URL retrieve деградирует на пустой context. Roadmap ясна, следующие итерации (persistence + audit) независимы от текущего стека.

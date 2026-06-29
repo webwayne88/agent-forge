@@ -3,16 +3,14 @@
 Раннер работает на фейк-LLM без сети — детерминирован.
 """
 
-import asyncio
-import json
 from pathlib import Path
 
 import pytest
 
-from evals.fakes import FakeLLM, estimate_cost, make_fake_llm, FAKE_CODE, FAKE_PLAN, FAKE_VERDICT_PASS, FAKE_VERDICT_FIX
+from evals.fakes import FakeLLM, estimate_cost, make_fake_llm, FAKE_CODE, FAKE_PLAN
 from evals.runner import gate, load_dataset, run_case, run_dataset, format_report
 from evals.schema import CaseResult, EvalCase, EvalDataset, EvalReport
-from app.schemas.pipeline import GeneratedCode, Plan, ReviewVerdict
+from app.schemas.pipeline import ReviewVerdict
 
 
 _DATASET_PATH = Path(__file__).parent.parent / "evals" / "dataset.json"
@@ -78,8 +76,7 @@ class TestEvalseFakes:
     def test_fake_llm_pass_returns_pass_verdict(self):
         """FakeLLM в режиме pass возвращает ReviewVerdict.verdict == 'pass'."""
         llm = make_fake_llm("pass")
-        inv = llm.with_structured_output(ReviewVerdict)
-        # Проверяем через синхронный вызов: FakeLLM._responses содержит нужный объект
+        # Проверяем через FakeLLM._responses: содержит нужный объект
         verdict = llm._responses[ReviewVerdict]
         assert verdict.verdict == "pass"
 

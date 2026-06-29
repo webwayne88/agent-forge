@@ -7,6 +7,7 @@ FakeLLM и готовые FAKE_* объекты живут в app/testing/fakes.
 
 import pytest
 
+from app.config import settings
 from app.schemas.pipeline import GeneratedCode, Plan, ReviewVerdict
 from app.testing.fakes import (
     FAKE_CODE,
@@ -73,7 +74,6 @@ class FakeDocumentRepository:
     """
 
     def __init__(self, lexical_results=None, vector_results=None):
-        from app.schemas.rag import RetrievedChunk
 
         self._lexical = lexical_results if lexical_results is not None else []
         self._vector = vector_results if vector_results is not None else []
@@ -98,7 +98,7 @@ class FakeEmbeddings:
     aembed_query возвращает вектор нужной размерности.
     """
 
-    def __init__(self, dim: int = 1024):
+    def __init__(self, dim: int = settings.embedding_dim):
         self._dim = dim
         self.embed_calls = 0
 
@@ -129,4 +129,4 @@ def fake_repo():
 @pytest.fixture
 def fake_embeddings():
     """Фейк эмбеддингов."""
-    return FakeEmbeddings(dim=1024)
+    return FakeEmbeddings(dim=settings.embedding_dim)
