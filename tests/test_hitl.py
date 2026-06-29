@@ -13,7 +13,6 @@ from app.schemas.pipeline import GeneratedCode, Plan, ReviewVerdict
 from tests.conftest import (
     FAKE_CODE,
     FAKE_PLAN,
-    FAKE_VERDICT_FIX,
     FAKE_VERDICT_PASS,
     FakeLLM,
 )

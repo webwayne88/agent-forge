@@ -22,15 +22,19 @@ LIMIT $2
 """
 
 # Векторный поиск: оператор <=> — косинусное расстояние; score = 1 - distance.
+# Каст $1::halfvec — колонка embedding имеет тип halfvec(2560); явный каст снимает
+# неоднозначность вывода типа параметра asyncpg (тот же кодек принимает list[float]).
 _VECTOR_SQL = """
-SELECT source, content, 1 - (embedding <=> $1) AS score
+SELECT source, content, 1 - (embedding <=> $1::halfvec) AS score
 FROM documents
 WHERE embedding IS NOT NULL
-ORDER BY embedding <=> $1
+ORDER BY embedding <=> $1::halfvec
 LIMIT $2
 """
 
-_INSERT_SQL = "INSERT INTO documents (source, content, embedding) VALUES ($1, $2, $3)"
+_INSERT_SQL = (
+    "INSERT INTO documents (source, content, embedding) VALUES ($1, $2, $3::halfvec)"
+)
 
 
 class PgDocumentRepository(DocumentRepository):

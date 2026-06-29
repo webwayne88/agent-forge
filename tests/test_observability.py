@@ -4,11 +4,10 @@ Langfuse не вызывает сеть в тестах — всё через mo
 lru_cache у get_langfuse_handler требует cache_clear() между тестами.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-import app.observability.langfuse as lf_module
 from app.observability.langfuse import get_callbacks, get_langfuse_handler
 
 
