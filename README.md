@@ -1,8 +1,12 @@
 # Agent Forge
 
+[![CI](https://github.com/webwayne88/agent-forge/actions/workflows/ci.yml/badge.svg)](https://github.com/webwayne88/agent-forge/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+
 > Узкий, но production-grade срез корпоративной AI-платформы: мультиагентный пайплайн **Planner → Coder → Reviewer** с reflection-петлёй, который по техзадаче на функцию/эндпоинт генерирует код, ревьюит его и итеративно чинит.
 
-Это не «платформа из 12 агентов» — это 3 агента, доведённые до production-качества с правильной архитектурой, ограничителями и тестированием. Observability, eval-датасет и human-in-the-loop — следующие итерации. Портфолио-проект под роль **AI/LLM Systems Engineer** (Enterprise Vibe Coding Engineer).
+Это не «платформа из 12 агентов» — это 3 агента, доведённые до production-качества с правильной архитектурой, ограничителями и тестированием. RAG (pgvector + hybrid search), observability (Langfuse), eval-датасет с CI-gate и human-in-the-loop — реализованы. Портфолио-проект под роль **AI/LLM Systems Engineer** (Enterprise Vibe Coding Engineer).
 
 ---
 
