@@ -1,0 +1,59 @@
+{
+  "cases": [
+    {
+      "id": "hello-happy",
+      "task": "Напиши функцию hello, возвращающую строку 'hello'",
+      "fake_mode": "pass",
+      "expect_verdict": "pass",
+      "expect_language": "python",
+      "expect_code_contains": ["def hello"],
+      "expect_status": "reviewed"
+    },
+    {
+      "id": "greeting-basic",
+      "task": "Сделай простую функцию приветствия на Python",
+      "fake_mode": "pass",
+      "expect_verdict": "pass",
+      "expect_language": "python",
+      "expect_code_contains": ["return"]
+    },
+    {
+      "id": "lang-check",
+      "task": "Реализуй функцию и укажи язык реализации",
+      "fake_mode": "pass",
+      "expect_language": "python"
+    },
+    {
+      "id": "code-substring",
+      "task": "Напиши функцию, которая возвращает строку hello",
+      "fake_mode": "pass",
+      "expect_code_contains": ["def hello", "return"]
+    },
+    {
+      "id": "status-reviewed",
+      "task": "Сгенерируй код и доведи пайплайн до ревью",
+      "fake_mode": "pass",
+      "expect_status": "reviewed"
+    },
+    {
+      "id": "verdict-pass-only",
+      "task": "Напиши корректную функцию, проходящую ревью",
+      "fake_mode": "pass",
+      "expect_verdict": "pass"
+    },
+    {
+      "id": "reflection-stop",
+      "task": "Кейс, где ревьюер всегда требует правок — проверка остановки петли",
+      "fake_mode": "fix",
+      "expect_verdict": "fix",
+      "expect_language": "python"
+    },
+    {
+      "id": "reflection-stop-status",
+      "task": "Ещё один fix-кейс: пайплайн останавливается на лимите итераций",
+      "fake_mode": "fix",
+      "expect_verdict": "fix",
+      "expect_status": "reviewed"
+    }
+  ]
+}
