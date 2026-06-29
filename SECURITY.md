@@ -7,8 +7,9 @@
 
 ## Как сообщить об уязвимости
 
-Не открывайте публичный issue для уязвимостей. Напишите на
-**nikagubanova29@gmail.com** с описанием:
+Не открывайте публичный issue для уязвимостей. Воспользуйтесь приватным каналом
+GitHub — [Security Advisories](https://github.com/webwayne88/agent-forge/security/advisories/new)
+(Report a vulnerability) — с описанием:
 
 - характер проблемы и потенциальное влияние;
 - шаги воспроизведения (PoC, если есть);
